@@ -1,0 +1,11 @@
+# Python environment files and folders to ignore
+lib64
+bin
+lib
+share
+pyvenv.cfg
+
+# data files to ignore
+*.csv
+*.json
+

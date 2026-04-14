@@ -61,38 +61,41 @@ def convert_csv_to_geojson(csv_file_path, geojson_file_path=None):
                 # Dump all rows not otherwise used as properties
                 properties = {key: value for key, value in row.items() if key not in ['Find Lng', 'Find Lat', '\ufeff\"Mission #\"']}
 
-                # Title is the mission number string
+                # Title is the mission number string. Strip any leading '#' character if it exists, 
+                # since that is used in some of the data but not all.
                 properties['title'] = row['\ufeff\"Mission #\"']
+                if properties['title'].startswith('#'):
+                    properties['title'] = properties['title'][1:]
 
                 # Marker size
                 properties['marker-size'] = '1'
-                
-                #determine the marker-color from the 'Outcome' row value, or some other property if 'Outcome' is not available
-                color_outcome = {
-                    'Person Assisted': '#00FF00',
-                    # Life saved is yellow
-                    'Life Saved': '#0000FF',
-                    'Deceased': '#FF0000',
-                    'Not Located': '#000000'
-                }
-                properties['marker-color'] = color_outcome.get(row.get('Outcome'), '#000000') # Default to black if no match
 
-                #determine the marker-symbol from the 'Outcome' row value, or some other property if 'Outcome' is not available
-                symbol_outcome = {
-                    'Person Assisted': 'circle-a',
-                    'Life Saved': 'circle-b',
-                    'Deceased': 'circle-c',
-                    'Not Located': 'circle-u'
-                }
-                properties['marker-symbol'] = symbol_outcome.get(row.get('Outcome'), 'circle-u')
+                # note that some fields, like outcome, ages, etc., can be comma-delimited lists if the number of subjects > 1,
+                # so we will just take the worst-case outcome for color and symbol.                
+                # determine the marker-color from the 'Outcome' row value, or some other property if 'Outcome' is not available
+                # determine the marker-symbol from the 'Outcome' row value, or some other property if 'Outcome' is not available
 
+                if row.get('Outcome').find('Deceased') != -1:
+                    properties['marker-color'] = '#FF0000'
+                    properties['marker-symbol'] = 'circle-c'
+                elif row.get('Outcome').find('Life Saved') != -1:
+                        properties['marker-color'] = '#0000FF'
+                        properties['marker-symbol'] = 'circle-b'
+                elif row.get('Outcome').find('Person Assisted') != -1:
+                    properties['marker-color'] = '#00FF00'
+                    properties['marker-symbol'] = 'circle-a'
+                else:
+                    properties['marker-color'] = '#000000'
+                    properties['marker-symbol'] = 'circle-u'    
+
+                # TBD - This doesn't create folders on import, needs more work
                 #folder is "Finds/" + the year of the find, which is extracted from the 'Incident Date' column
-                if 'Incident Date' in row:
-                    date = datetime.strptime(row['Incident Date'], "%Y-%m-%d %H:%M:%S").date()
-                    #properties['folder'] = 'Find/' + date.strftime("%Y")
-                    properties['folder'] = date.strftime("%Y")
-                else:                 
-                    properties['folder'] = 'Unknown Year'
+                #if 'Incident Date' in row:
+                #    date = datetime.strptime(row['Incident Date'], "%Y-%m-%d %H:%M:%S").date()
+                #    #properties['folder'] = 'Find/' + date.strftime("%Y")
+                #    properties['folder'] = date.strftime("%Y")
+                #else:                 
+                #    properties['folder'] = 'Unknown Year'
 
                 feature = {
                     "type": "Feature",

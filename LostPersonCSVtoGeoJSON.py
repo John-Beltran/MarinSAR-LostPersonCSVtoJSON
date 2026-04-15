@@ -5,11 +5,14 @@ import json
 from typing import Dict
 import uuid
 
-#determine the marker-color from the 'Outcome' row value, or some other property if 'Outcome' is not available
+# Determine the color from the 'Outcome' row value, or some other property if 
+# 'Outcome' is not available. Note that the order of this dictionary should be from 
+# most severe to least severe outcome, so that if an outcome contains multiple 
+# of the keywords, the most severe outcome will determine the marker color
 color_outcome = {
-    'Person Assisted': '#00FF00',
-    'Life Saved': '#0000FF',
     'Deceased': '#FF0000',
+    'Life Saved': '#0000FF',
+    'Person Assisted': '#00FF00',
     'Not Located': '#000000'
 }
 
@@ -86,16 +89,30 @@ def get_findmarker_properties(data: Dict[str, str], folder_uuid: str) -> Dict[st
 
         # Marker size
         properties['marker-size'] = '1'
-        properties['marker-color'] = color_outcome.get(data.get('Outcome'), '#000000') # Default to black if no match
 
-        #determine the marker-symbol from the 'Outcome' row value, or some other property if 'Outcome' is not available
+        # Determine the symbol from the 'Outcome' row value, or some other property if 
+        # 'Outcome' is not available. Note that the keys to this dictionary must match
+        # the keys in the color_outcome dictionary
         symbol_outcome = {
-            'Person Assisted': 'circle-a',
-            'Life Saved': 'circle-b',
             'Deceased': 'circle-c',
+            'Life Saved': 'circle-b',
+            'Person Assisted': 'circle-a',
             'Not Located': 'circle-u'
         }
-        properties['marker-symbol'] = symbol_outcome.get(data.get('Outcome'), 'circle-u')
+
+        # Outcome based properties, iterating on color_outcome keys 
+        # in *insertion order* for that dictionary to ensure that if an outcome 
+        # contains multiple of the keywords, the most severe outcome will determine 
+        # the marker color and symbol   
+        outcome = data.get('Outcome')
+        properties['marker-color'] = color_outcome.get('Not Located')
+        properties['marker-symbol'] = symbol_outcome.get('Not Located')
+        for (color_outcome_key, color_outcome_value) in color_outcome.items():
+            if (outcome.find(color_outcome_key) != -1):
+                properties['marker-color'] = color_outcome_value
+                properties['marker-symbol'] = symbol_outcome.get(color_outcome_key, 'circle-u')
+                break
+
         properties['class'] = 'Marker'
         properties['folderId'] = folder_uuid
 
@@ -118,10 +135,20 @@ def get_ippmarker_properties(data: Dict[str, str], folder_uuid: str) -> Dict[str
 
     # Marker size
     properties['marker-size'] = '1'
-    properties['marker-color'] = color_outcome.get(data.get('Outcome'), '#000000') # Default to black if no match
     properties['marker-symbol'] = 'point'
     properties['class'] = 'Marker'
     properties['folderId'] = folder_uuid
+
+    # Outcome based properties, iterating on color_outcome keys 
+    # in *insertion order* for that dictionary to ensure that if an outcome 
+    # contains multiple of the keywords, the most severe outcome will determine 
+    # the marker color and symbol       
+    outcome = data.get('Outcome')
+    properties['marker-color'] = color_outcome.get('Not Located')
+    for (color_outcome_key, color_outcome_value) in color_outcome.items():
+        if (outcome.find(color_outcome_key) != -1):
+            properties['marker-color'] = color_outcome_value
+            break
 
     return properties
     
@@ -139,12 +166,22 @@ def get_line_properties(data: Dict[str, str], folder_uuid: str) -> Dict[str, str
         properties['title'] = title[:space_index]
     else:
         properties['title'] = title
-    properties['stroke'] = color_outcome.get(data.get('Outcome'), '#000000') # Default to black if no match
     properties['stroke-opacity'] = 1
     properties['stroke-width'] = 2
     properties['pattern'] = 'M-5 8 L0 -2 L5 8 Z,100%,,T' # Line with arrow
     properties['class'] = 'Shape'
     properties['folderId'] = folder_uuid
+
+    # Outcome based properties, iterating on color_outcome keys 
+    # in *insertion order* for that dictionary to ensure that if an outcome 
+    # contains multiple of the keywords, the most severe outcome will determine 
+    # the marker color and symbol       
+    outcome = data.get('Outcome')
+    properties['stroke'] = color_outcome.get('Not Located')
+    for (color_outcome_key, color_outcome_value) in color_outcome.items():
+        if (outcome.find(color_outcome_key) != -1):
+            properties['stroke'] = color_outcome_value
+            break
 
     return properties
     

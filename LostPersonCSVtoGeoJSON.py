@@ -3,6 +3,7 @@ import csv
 from datetime import datetime
 import json
 from typing import Dict
+import uuid
 
 #determine the marker-color from the 'Outcome' row value, or some other property if 'Outcome' is not available
 color_outcome = {
@@ -50,7 +51,24 @@ def parse_args():
     parser.add_argument('-o', '--output', default='output.json', help='Output JSON file path')
     return parser.parse_args()
 
-def get_findmarker_properties(data: Dict[str, str]) -> Dict[str, str]:
+# Function to add a folder feature with a provided name to a collection of features and return the uuid of the folder as a string
+def add_folder_feature(features: list, folder_name: str, folder_visible: bool, label_visible: bool) -> str:
+    folder_uuid = str(uuid.uuid4())
+    folder_feature = {
+        "geometry": None,
+        "type": "Feature",
+        "properties": {
+            "title": folder_name,
+            "class": "Folder",
+            "labelVisible": label_visible,
+            "visible": folder_visible
+        },
+        "id": folder_uuid
+    }
+    features.append(folder_feature)
+    return folder_uuid
+
+def get_findmarker_properties(data: Dict[str, str], folder_uuid: str) -> Dict[str, str]:
     # Implementation for getting find marker properties from a CSV row of data
     properties = {}
     if(is_float(data['Find Lng']) and is_float(data['Find Lat'])):
@@ -79,18 +97,11 @@ def get_findmarker_properties(data: Dict[str, str]) -> Dict[str, str]:
         }
         properties['marker-symbol'] = symbol_outcome.get(data.get('Outcome'), 'circle-u')
         properties['class'] = 'Marker'
-
-        #folder is "Finds/" + the year of the find, which is extracted from the 'Incident Date' column
-        #if 'Incident Date' in data:
-        #    date = datetime.strptime(data['Incident Date'], "%Y-%m-%d %H:%M:%S").date()
-        #    #properties['folder'] = 'Find/' + date.strftime("%Y")
-        #    properties['folder'] = date.strftime("%Y")
-        #else:                 
-        #    properties['folder'] = 'Unknown Year'
+        properties['folderId'] = folder_uuid
 
         return properties
 
-def get_ippmarker_properties(data: Dict[str, str]) -> Dict[str, str]:
+def get_ippmarker_properties(data: Dict[str, str], folder_uuid: str) -> Dict[str, str]:
     # Implementation for getting IPP marker properties from a CSV row of data
     properties = {}
     # Title is the mission number + ' IPP'
@@ -110,10 +121,11 @@ def get_ippmarker_properties(data: Dict[str, str]) -> Dict[str, str]:
     properties['marker-color'] = color_outcome.get(data.get('Outcome'), '#000000') # Default to black if no match
     properties['marker-symbol'] = 'point'
     properties['class'] = 'Marker'
+    properties['folderId'] = folder_uuid
 
     return properties
     
-def get_line_properties(data: Dict[str, str]) -> Dict[str, str]:
+def get_line_properties(data: Dict[str, str], folder_uuid: str) -> Dict[str, str]:
     # Implementation for getting line properties from a CSV row of data
     properties = {}
     # Title is the mission number
@@ -132,6 +144,7 @@ def get_line_properties(data: Dict[str, str]) -> Dict[str, str]:
     properties['stroke-width'] = 2
     properties['pattern'] = 'M-5 8 L0 -2 L5 8 Z,100%,,T' # Line with arrow
     properties['class'] = 'Shape'
+    properties['folderId'] = folder_uuid
 
     return properties
     
@@ -148,6 +161,10 @@ def convert_csv_to_geojson(csv_file_path, geojson_file_path=None):
     """
     features = []
     
+    # Add folders for finds and IPPs
+    find_folder_uuid = add_folder_feature(features, 'Finds', True, True)
+    ipp_folder_uuid = add_folder_feature(features, 'IPPs', False, False)
+
     with open(csv_file_path, 'r', encoding='utf-8') as csv_file:
         csv_reader = csv.DictReader(csv_file)
         for row in csv_reader:
@@ -160,7 +177,7 @@ def convert_csv_to_geojson(csv_file_path, geojson_file_path=None):
 
                 # Get properties for the find marker from the CSV row and add it 
                 # to the features list
-                find_properties = get_findmarker_properties(row)
+                find_properties = get_findmarker_properties(row, find_folder_uuid)
 
                 find_feature = {
                     "type": "Feature",
@@ -175,7 +192,7 @@ def convert_csv_to_geojson(csv_file_path, geojson_file_path=None):
                 # Get properties for the IPP marker fromt the CSV row and add the IPP marker 
                 # and line connecting the IPP marker to the find marker
                 if(is_float(row['IPP Lng']) and is_float(row['IPP Lat'])):
-                    ipp_properties = get_ippmarker_properties(row)
+                    ipp_properties = get_ippmarker_properties(row, ipp_folder_uuid)
                     ipp_feature = {
                         "type": "Feature",
                         "geometry": {
@@ -186,7 +203,7 @@ def convert_csv_to_geojson(csv_file_path, geojson_file_path=None):
                     features.append(ipp_feature)
 
                     # Add line feature connecting IPP to find location
-                    line_properties = get_line_properties(row)
+                    line_properties = get_line_properties(row, ipp_folder_uuid)
                     line_feature = {
                         "type": "Feature",
                         "geometry": {

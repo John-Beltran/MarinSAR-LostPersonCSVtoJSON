@@ -5,6 +5,34 @@ import json
 from typing import Dict
 import uuid
 
+from math import asin, atan2, cos, degrees, radians, sin
+
+def get_point_at_distance(lat1, lon1, d, bearing, R=6371):
+    """
+    lat: initial latitude, in degrees
+    lon: initial longitude, in degrees
+    d: target distance from initial point, in kilometers
+    bearing: (true) heading in degrees
+    R: optional radius of sphere, defaults to mean radius of earth
+
+    Returns new lat/lon coordinate {d}km from initial, in degrees
+    """
+    lat1 = radians(lat1)
+    lon1 = radians(lon1)
+    a = radians(bearing)
+    lat2 = asin(sin(lat1) * cos(d/R) + cos(lat1) * sin(d/R) * cos(a))
+    lon2 = lon1 + atan2(
+        sin(a) * sin(d/R) * cos(lat1),
+        cos(d/R) - sin(lat1) * sin(lat2)
+    )
+    return (degrees(lat2), degrees(lon2),)
+
+def feet_to_km(feet):
+    return feet * 0.0003048
+
+def km_to_feet(km):
+    return km / 0.0003048
+
 # Determine the color from the 'Outcome' row value, or some other property if 
 # 'Outcome' is not available. Note that the order of this dictionary should be from 
 # most severe to least severe outcome, so that if an outcome contains multiple 
@@ -152,7 +180,10 @@ def get_ippmarker_properties(data: Dict[str, str], folder_uuid: str) -> Dict[str
 
     return properties
     
-def get_line_properties(data: Dict[str, str], folder_uuid: str) -> Dict[str, str]:
+def get_line_properties(data: Dict[str, str], 
+                        folder_uuid: str, 
+                        additional_title: str = "", 
+                        pattern: str = "") -> Dict[str, str]:
     # Implementation for getting line properties from a CSV row of data
     properties = {}
     # Title is the mission number
@@ -166,9 +197,11 @@ def get_line_properties(data: Dict[str, str], folder_uuid: str) -> Dict[str, str
         properties['title'] = title[:space_index]
     else:
         properties['title'] = title
+    properties['title'] += additional_title
     properties['stroke-opacity'] = 1
     properties['stroke-width'] = 2
-    properties['pattern'] = 'M-5 8 L0 -2 L5 8 Z,100%,,T' # Line with arrow
+    if (len(pattern) > 0):
+        properties['pattern'] = pattern
     properties['class'] = 'Shape'
     properties['folderId'] = folder_uuid
 
@@ -184,7 +217,8 @@ def get_line_properties(data: Dict[str, str], folder_uuid: str) -> Dict[str, str
             break
 
     return properties
-    
+
+
 def convert_csv_to_geojson(csv_file_path, geojson_file_path=None):
     """
     Convert a CSV file to GeoJSON format.
@@ -210,7 +244,9 @@ def convert_csv_to_geojson(csv_file_path, geojson_file_path=None):
             # find marker and add it to the features list, as well as possibly the 
             # IPP marker and line connecting the IPP marker to the find marker 
             # if the IPP coordinates are valid
-            if(is_float(row['Find Lng']) and is_float(row['Find Lat'])):
+            find_lat = row['Find Lat']
+            find_lng = row['Find Lng']
+            if(is_float(find_lng) and is_float(find_lat)):
 
                 # Get properties for the find marker from the CSV row and add it 
                 # to the features list
@@ -220,11 +256,30 @@ def convert_csv_to_geojson(csv_file_path, geojson_file_path=None):
                     "type": "Feature",
                     "geometry": {
                         "type": "Point",
-                        "coordinates": [float(row['Find Lng']), float(row['Find Lat'])]
+                        "coordinates": [float(find_lng), float(find_lat)]
                     },
                     "properties": find_properties
                 }
                 features.append(find_feature)
+
+                range_properties = get_line_properties(row, ipp_folder_uuid, 
+                                                       ' 100ft')
+                range_coordinates = []
+                rng = feet_to_km(100)
+                for(bearing) in range(0, 365, 5):
+                    # Note the order of coordinates in GeoJSON is (lng, lat)
+                    coords = get_point_at_distance(float(find_lat), float(find_lng), rng, bearing)
+                    range_coordinates.append((coords[1], coords[0])) 
+
+                range_circle_feature = {
+                    "type": "Feature",
+                    "geometry": {
+                        "type": "LineString",
+                        "coordinates": range_coordinates
+                    },
+                    "properties": range_properties
+                }
+                features.append(range_circle_feature)
 
                 # Get properties for the IPP marker fromt the CSV row and add the IPP marker 
                 # and line connecting the IPP marker to the find marker
@@ -240,7 +295,10 @@ def convert_csv_to_geojson(csv_file_path, geojson_file_path=None):
                     features.append(ipp_feature)
 
                     # Add line feature connecting IPP to find location
-                    line_properties = get_line_properties(row, ipp_folder_uuid)
+                    line_properties = get_line_properties(row, 
+                                                          ipp_folder_uuid,
+                                                          '',
+                                                          'M-5 8 L0 -2 L5 8 Z,100%,,T') # Line with arrow
                     line_feature = {
                         "type": "Feature",
                         "geometry": {
